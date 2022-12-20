@@ -1,0 +1,59 @@
+#include <msp430.h>
+#include <math.h>
+
+
+volatile float photosensor_adc_value;
+volatile float Light; //on a scale of 1 - 100
+
+
+int main(void)
+{
+
+    WDTCTL = WDTPW | WDTHOLD;                                     // Stop WDT
+
+    PM5CTL0 &= ~LOCKLPM5;                                         // gets rid of some error
+
+    TB0CCTL0 |= CCIE;                                             // TBCCR0 interrupt enabled
+    TB0CCR0 = 65535;
+    TB0CTL = TBSSEL__ACLK | MC__UP;  // ACLK, UP mode
+
+
+    //configure P1.2 for photosensor
+    P1SEL0 |=BIT1;
+    P1SEL1 |=BIT1;
+
+
+    // adc set up
+      ADCCTL0 = ADCSHT_2 | ADCON;  // set sample
+      ADCCTL1 = ADCSHP | ADCCONSEQ_0;  // sampling timer
+      ADCMCTL0 = ADCINCH_1;  // input P1.2
+
+
+            while (1) // breakpoint here to see code update real time
+            {
+
+              ADCCTL0 |= ADCENC | ADCSC;  // enable conversion and start conversion
+
+              while (ADCCTL1 & ADCBUSY);  // wait for conversion to complete
+
+              photosensor_adc_value = (ADCMEM0);  // read the ADC value
+
+              Light = (((photosensor_adc_value - 1000)/(10))*(-1)); //putting the light on a scale of 1% to 100% brightness level
+
+            }
+
+}
+
+
+// Timer B0 interrupt service routine
+#if defined(__TI_COMPILER_VERSION__) || defined(__IAR_SYSTEMS_ICC__)
+#pragma vector = TIMER0_B0_VECTOR
+__interrupt void Timer_B (void)
+#elif defined(__GNUC__)
+void __attribute__ ((interrupt(TIMER0_B0_VECTOR))) Timer_B (void)
+#else
+#error Compiler not supported!
+#endif
+{
+    ADCCTL0 |= ADCENC | ADCSC;                                   
+}
