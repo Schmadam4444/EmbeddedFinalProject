@@ -1,0 +1,183 @@
+#include <msp430.h>
+#include <math.h>
+
+
+volatile float photosensor_adc_value;
+volatile float Light; //on a scale of 1 - 100
+
+void UARTSetup();
+void writeChar(unsigned char data);
+
+int Motion;
+
+int i;
+int j;
+int position;
+
+int main(void)
+{
+    WDTCTL = WDTPW | WDTHOLD;  // Stop watchdog timer
+
+    TB0CCTL0 |= CCIE;                                             // TBCCR0 interrupt enabled
+    TB0CCR0 = 65535;
+    TB0CTL = TBSSEL__ACLK | MC__UP;  // ACLK, UP mode
+
+    P1DIR |= BIT0;
+    P1OUT &= ~BIT0;
+
+    P1SEL0 |=BIT1;
+    P1SEL1 |=BIT1;
+
+    ADCCTL0 = ADCSHT_2 | ADCON;  // set sample
+    ADCCTL1 = ADCSHP | ADCCONSEQ_0;  // sampling timer
+    ADCMCTL0 = ADCINCH_1;  // input P1.2
+
+    // Configure P1.2 as an input with a pull-up resistor
+    P1DIR &= ~BIT2;  // Set P1.2 to input mode
+
+    UARTSetup();
+
+    char tx[2]; //2char string
+    tx[0] = 'B'; //First character letter b
+
+    while (1)
+    {
+        if (P1IN & BIT2)  // Check if P1.2 is high
+        {
+            // PIR sensor is detecting motion
+            // Perform some action here (e.g., turn on an LED, output a value, etc.)
+
+            Motion = 1;
+            P1OUT |= BIT0;
+
+        }
+        else
+        {
+            // PIR sensor is not detecting motion
+            // Perform some action here (e.g., turn off the LED, output a different value, etc.)
+
+            Motion = 0;
+            P1OUT &= ~BIT0;
+        }
+
+        ADCCTL0 |= ADCENC | ADCSC;  // enable conversion and start conversion
+
+            while (ADCCTL1 & ADCBUSY);  // wait for conversion to complete
+
+            photosensor_adc_value = (ADCMEM0);  // read the ADC value
+
+            Light = (((photosensor_adc_value - 1000)/(10))*(-1)); //putting the light on a scale of 1% to 100% brightness level
+
+        tx[1] = Motion + 48; // + 48 asci
+        for (position = 0; position < sizeof(tx); position++)
+        {
+            writeChar(tx[position]);
+            for (i = 0; i < 100; i++)
+            {
+            }
+        }
+        {
+
+        }
+    }
+
+}
+
+void UARTSetup()
+{
+    UCA1CTLW0 |= UCSWRST;
+
+    UCA1CTLW0 |= UCSSEL__SMCLK;
+    UCA1BRW = 8;
+    UCA1MCTLW = 0xD600;
+
+    P4SEL1 &= ~BIT3;
+    P4SEL0 |= BIT3;
+
+    PM5CTL0 &= ~LOCKLPM5;
+
+    UCA1CTLW0 &= ~UCSWRST;
+}
+... (18 lines left)
+Collapse
+Light_Sensor_and_Motion_Sensor_with_UART_for_Motion.txt
+3 KB
+Temp Sense only
+#include <msp430.h>
+#include <math.h>
+
+
+#define B 3950  // thermistor beta
+#define R0 10000  // thermistor resistance at room temp ~25C
+
+
+volatile float thermistor_adc_value;
+volatile float resistance;
+volatile float celsius;
+volatile float fahrenheit;
+
+
+int main(void)
+{
+
+    WDTCTL = WDTPW | WDTHOLD;                                     // Stop WDT
+
+    PM5CTL0 &= ~LOCKLPM5;                                         // gets rid of some error
+
+    TB0CCTL0 |= CCIE;                                             // TBCCR0 interrupt enabled
+    TB0CCR0 = 65535;
+    TB0CTL = TBSSEL__ACLK | MC__UP;  // ACLK, UP mode
+
+
+    //configure P1.3 for thermistor
+    P1SEL0 |=BIT3;
+    P1SEL1 |=BIT3;
+
+
+    // adc set up
+      ADCCTL0 = ADCSHT_2 | ADCON;  // set sample
+      ADCCTL1 = ADCSHP | ADCCONSEQ_0;  // sampling timer
+      ADCMCTL0 = ADCINCH_3;  // input P1.3
+
+
+    // Configure reference
+    PMMCTL0_H = PMMPW_H;                                          // Unlock the PMM registers
+    PMMCTL2 |= INTREFEN | TSENSOREN | REFVSEL_0;                  // Enable internal 1.5V reference and temperature sensor
+    __delay_cycles(400);                                          // Delay for reference settling
+
+
+            while (1) // breakpoint here to see code update real time
+            {
+
+              ADCCTL0 |= ADCENC | ADCSC;  // enable conversion and start conversion
+
+              while (ADCCTL1 & ADCBUSY);  // wait for conversion to complete
+
+              thermistor_adc_value = (ADCMEM0);  // read the ADC value
+
+              //resistance of thermistor
+              resistance = (float)R0 * (1023.0 / (float)thermistor_adc_value - 1.0);
+
+              //celsius convert
+              celsius = 1.0 / (1.0 / (25.0 + 273.15) + ((-1)*log(resistance / R0) / B)) - 273.15;  //Steinhart-Hart's thermistor equation
+
+              //fahrenheit convert
+              fahrenheit = (celsius * 1.8 + 32);
+
+            }
+
+}
+
+
+// Timer B0 interrupt service routine
+#if defined(__TI_COMPILER_VERSION__) || defined(__IAR_SYSTEMS_ICC__)
+#pragma vector = TIMER0_B0_VECTOR
+__interrupt void Timer_B (void)
+#elif defined(__GNUC__)
+void __attribute__ ((interrupt(TIMER0_B0_VECTOR))) Timer_B (void)
+#else
+#error Compiler not supported!
+#endif
+{
+    ADCCTL0 |= ADCENC | ADCSC;                                    // Sampling and conversion start
+}
