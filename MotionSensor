@@ -1,0 +1,80 @@
+#include <msp430.h>
+
+void UARTSetup();
+void writeChar(unsigned char data);
+
+int Motion;
+
+int i;
+int j;
+int position;
+
+int main(void)
+{
+    WDTCTL = WDTPW | WDTHOLD;  // Stop watchdog timer
+
+    P1DIR |= BIT0;
+    P1OUT &= ~BIT0;
+
+    // Configure P1.2 as an input with a pull-up resistor
+    P1DIR &= ~BIT2;  // Set P1.2 to input mode
+
+    UARTSetup();
+
+    char tx[2]; //2char string
+    tx[0] = 'B'; //First character letter b
+
+    while (1)
+    {
+        if (P1IN & BIT2)  // Check if P1.2 is high
+        {
+            // PIR sensor is detecting motion
+            // Perform some action here (e.g., turn on an LED, output a value, etc.)
+
+            Motion = 1;
+            P1OUT |= BIT0;
+
+        }
+        else
+        {
+            // PIR sensor is not detecting motion
+            // Perform some action here (e.g., turn off the LED, output a different value, etc.)
+
+            Motion = 0;
+            P1OUT &= ~BIT0;
+        }
+        tx[1] = Motion + 48; // + 48 asci
+        for (position = 0; position < sizeof(tx); position++)
+        {
+            writeChar(tx[position]);
+            for (i = 0; i < 100; i++)
+            {
+            }
+        }
+        {
+
+        }
+    }
+
+}
+
+void UARTSetup()
+{
+    UCA1CTLW0 |= UCSWRST;
+
+    UCA1CTLW0 |= UCSSEL__SMCLK;
+    UCA1BRW = 8;
+    UCA1MCTLW = 0xD600;
+
+    P4SEL1 &= ~BIT3;
+    P4SEL0 |= BIT3;
+
+    PM5CTL0 &= ~LOCKLPM5;
+
+    UCA1CTLW0 &= ~UCSWRST;
+}
+void writeChar(unsigned char data)
+{
+    UCA1TXBUF = data;
+    return;
+}
